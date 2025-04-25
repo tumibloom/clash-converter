@@ -1,0 +1,61 @@
+mode: rule
+mixed-port: 7897
+allow-lan: true
+log-level: info
+external-controller: 127.0.0.1:9097
+secret: ''
+unified-delay: true
+external-controller-cors:
+  allow-private-network: true
+  allow-origins:
+    - '*'
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  prefer-h3: false
+  use-system-hosts: false
+  cache-algorithm: arc
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - +.lan
+    - +.local
+    - '*.arpa'
+    - time.*.com
+    - ntp.*.com
+    - time.*.com
+    - +.market.xiaomi.com
+    - +.msftconnecttest.com
+    - +.msftncsi.com
+    - localhost.ptlogin2.qq.com
+    - localhost.sec.qq.com
+    - localhost.work.weixin.qq.com
+  default-nameserver:
+    - 223.5.5.5
+    - 1.2.4.8
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://8.8.4.4/dns-query#ecs=1.1.1.1/24&ecs-override=true
+    - https://208.67.222.222/dns-query#ecs=1.1.1.1/24&ecs-override=true
+  proxy-server-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query
+  respect-rules: true
+  nameserver-policy:
+    geosite:private,cn: https://223.5.5.5/dns-query
+profile:
+  store-selected: true
+tun:
+  auto-detect-interface: true
+  auto-route: true
+  device: Mihomo
+  dns-hijack:
+    - any:53
+  mtu: 1500
+  stack: gvisor
+  strict-route: true
+  enable: true
