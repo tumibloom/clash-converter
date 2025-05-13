@@ -14,8 +14,6 @@ RUN sed -i 's#https\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.tuna.tsing
 RUN apk update
 RUN apk --no-cache add tzdata ca-certificates
 
-# Timezone
-RUN echo 'Asia/Shanghai' >/etc/timezone
 # Where application lives
 WORKDIR /app
 # Copy the products
