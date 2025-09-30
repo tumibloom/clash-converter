@@ -300,45 +300,7 @@ log({status: 'ok', count: 42});  // 支持对象
 
 ### 完整示例
 
-```javascript
-// 定义规则集
-function rulesets(callback) {
-    log('开始加载规则集');
-
-    // 基础规则
-    callback('DIRECT', 'https://example.com/direct.list');
-    callback('PROXY', 'https://example.com/proxy.list');
-    callback('REJECT', 'https://example.com/reject.list');
-
-    // 流媒体规则
-    callback('Netflix', 'https://example.com/netflix.list');
-    callback('Disney+', 'https://example.com/disney.list');
-
-    log('规则集配置完成');
-}
-
-// 自定义配置
-function buildConfig(config) {
-    log('开始自定义配置');
-
-    // 基础设置
-    config['mixed-port'] = 7890;
-    config['allow-lan'] = true;
-    config['log-level'] = 'info';
-
-    // DNS 配置
-    config['dns'] = {
-        enable: true,
-        listen: '0.0.0.0:53',
-        nameserver: ['223.5.5.5', '119.29.29.29']
-    };
-
-    // 添加最终匹配规则
-    config['rules'].push('MATCH,PROXY');
-
-    log('配置自定义完成，共 ' + config.rules.length + ' 条规则');
-}
-```
+参见 `example/scripts.js` 和 `example/template.yaml`。
 
 ### 说明
 
