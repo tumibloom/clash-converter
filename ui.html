@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订阅链接生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 28px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, input[type="url"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .sub-list {
+            margin-top: 10px;
+        }
+
+        .sub-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .sub-item input {
+            flex: 1;
+        }
+
+        .sub-controls {
+            display: flex;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .result-box {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 10px;
+        }
+
+        .result-box:hover {
+            background: #e9ecef;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 24px;
+                margin-bottom: 20px;
+            }
+
+            .card {
+                padding: 16px;
+            }
+
+            .sub-item {
+                flex-wrap: nowrap;
+            }
+
+            .sub-item input {
+                min-width: 0;
+            }
+
+            .sub-controls {
+                flex-wrap: nowrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>订阅链接生成器</h1>
+
+        <div class="card">
+            <div class="section-title">基础配置</div>
+
+            <div class="form-group">
+                <label for="baseUrl">Base URL</label>
+                <input type="url" id="baseUrl" placeholder="https://example.com">
+            </div>
+
+            <div class="form-group">
+                <label for="script">Script URL</label>
+                <input type="url" id="script" placeholder="https://example.com/script.js">
+            </div>
+
+            <div class="form-group">
+                <label for="template">Template URL</label>
+                <input type="url" id="template" placeholder="https://example.com/template.yaml">
+            </div>
+
+            <div class="form-group">
+                <label for="token">Access Token</label>
+                <input type="text" id="token" placeholder="your-access-token">
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">订阅列表</div>
+
+            <div class="sub-list" id="subList"></div>
+
+            <button class="btn btn-primary" onclick="addSub()">+ 添加订阅</button>
+        </div>
+
+        <div class="card">
+            <div class="section-title">生成的订阅链接</div>
+            <div class="result-box" id="resultUrl" onclick="copyText('resultUrl')">链接将在此显示</div>
+            <div class="hint">点击复制</div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">收藏链接</div>
+            <div class="result-box" id="bookmarkUrl" onclick="copyText('bookmarkUrl')">收藏链接将在此显示</div>
+            <div class="hint">点击复制</div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'clash-converter-config';
+
+        // 初始化
+        function init() {
+            // 默认 baseUrl 为当前页面的 origin
+            document.getElementById('baseUrl').value = window.location.origin;
+
+            // 从 localStorage 加载配置
+            loadFromStorage();
+
+            // 从 URL 参数加载配置（覆盖 localStorage）
+            loadFromQuery();
+
+            // 如果没有订阅，添加一个空的
+            if (document.querySelectorAll('.sub-item').length === 0) {
+                addSub();
+            }
+
+            // 生成链接
+            generateLinks();
+
+            // 监听输入变化
+            document.getElementById('baseUrl').addEventListener('input', handleChange);
+            document.getElementById('script').addEventListener('input', handleChange);
+            document.getElementById('template').addEventListener('input', handleChange);
+            document.getElementById('token').addEventListener('input', handleChange);
+        }
+
+        // 从 localStorage 加载
+        function loadFromStorage() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+
+            try {
+                const config = JSON.parse(saved);
+                if (config.baseUrl) document.getElementById('baseUrl').value = config.baseUrl;
+                if (config.script) document.getElementById('script').value = config.script;
+                if (config.template) document.getElementById('template').value = config.template;
+                if (config.token) document.getElementById('token').value = config.token;
+                if (config.subs && config.subs.length > 0) {
+                    config.subs.forEach(sub => addSub(sub));
+                }
+            } catch (e) {
+                console.error('Failed to load config from storage:', e);
+            }
+        }
+
+        // 从 URL 参数加载
+        function loadFromQuery() {
+            const params = new URLSearchParams(window.location.search);
+
+            if (params.has('baseUrl')) {
+                document.getElementById('baseUrl').value = params.get('baseUrl');
+            }
+            if (params.has('script')) {
+                document.getElementById('script').value = params.get('script');
+            }
+            if (params.has('template')) {
+                document.getElementById('template').value = params.get('template');
+            }
+            if (params.has('token')) {
+                document.getElementById('token').value = params.get('token');
+            }
+
+            const subParams = params.getAll('sub');
+            if (subParams.length > 0) {
+                // 清空现有订阅
+                document.getElementById('subList').innerHTML = '';
+                subParams.forEach(sub => addSub(sub));
+            }
+        }
+
+        // 添加订阅
+        function addSub(value = '') {
+            const subList = document.getElementById('subList');
+            const index = subList.children.length;
+
+            const div = document.createElement('div');
+            div.className = 'sub-item';
+            div.innerHTML = `
+                <input type="url" placeholder="订阅链接" value="${value}" onchange="handleChange()">
+                <div class="sub-controls">
+                    <button class="btn btn-secondary btn-small" onclick="moveSub(${index}, -1)">↑</button>
+                    <button class="btn btn-secondary btn-small" onclick="moveSub(${index}, 1)">↓</button>
+                    <button class="btn btn-secondary btn-small" onclick="removeSub(${index})">删除</button>
+                </div>
+            `;
+
+            subList.appendChild(div);
+            updateSubIndices();
+            handleChange();
+        }
+
+        // 删除订阅
+        function removeSub(index) {
+            const subList = document.getElementById('subList');
+            subList.children[index].remove();
+            updateSubIndices();
+            handleChange();
+        }
+
+        // 移动订阅
+        function moveSub(index, direction) {
+            const subList = document.getElementById('subList');
+            const items = Array.from(subList.children);
+            const newIndex = index + direction;
+
+            if (newIndex < 0 || newIndex >= items.length) return;
+
+            const item = items[index];
+            const target = items[newIndex];
+
+            if (direction < 0) {
+                subList.insertBefore(item, target);
+            } else {
+                subList.insertBefore(item, target.nextSibling);
+            }
+
+            updateSubIndices();
+            handleChange();
+        }
+
+        // 更新订阅索引（更新按钮的 onclick 事件）
+        function updateSubIndices() {
+            const items = document.querySelectorAll('.sub-item');
+            items.forEach((item, index) => {
+                const controls = item.querySelector('.sub-controls');
+                controls.innerHTML = `
+                    <button class="btn btn-secondary btn-small" onclick="moveSub(${index}, -1)">↑</button>
+                    <button class="btn btn-secondary btn-small" onclick="moveSub(${index}, 1)">↓</button>
+                    <button class="btn btn-secondary btn-small" onclick="removeSub(${index})">删除</button>
+                `;
+            });
+        }
+
+        // 获取当前配置
+        function getConfig() {
+            const baseUrl = document.getElementById('baseUrl').value.trim();
+            const script = document.getElementById('script').value.trim();
+            const template = document.getElementById('template').value.trim();
+            const token = document.getElementById('token').value.trim();
+
+            const subs = Array.from(document.querySelectorAll('.sub-item input'))
+                .map(input => input.value.trim())
+                .filter(v => v);
+
+            return { baseUrl, script, template, token, subs };
+        }
+
+        // 生成链接
+        function generateLinks() {
+            const config = getConfig();
+
+            if (!config.baseUrl) {
+                document.getElementById('resultUrl').textContent = '请填写 Base URL';
+                document.getElementById('bookmarkUrl').textContent = '请填写 Base URL';
+                return;
+            }
+
+            // 去除 baseUrl 尾部的斜杠
+            const baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
+
+            // 手动构建订阅链接参数，使用 encodeURIComponent 避免加号问题
+            const params = [];
+            config.subs.forEach(sub => {
+                params.push('sub=' + encodeURIComponent(sub));
+            });
+            if (config.script) params.push('script=' + encodeURIComponent(config.script));
+            if (config.template) params.push('template=' + encodeURIComponent(config.template));
+            if (config.token) params.push('token=' + encodeURIComponent(config.token));
+
+            document.getElementById('resultUrl').textContent = `${baseUrl}/sub?${params.join('&')}`;
+
+            // 手动构建收藏链接参数
+            const bookmarkParams = [];
+            if (config.baseUrl) bookmarkParams.push('baseUrl=' + encodeURIComponent(config.baseUrl));
+            config.subs.forEach(sub => {
+                bookmarkParams.push('sub=' + encodeURIComponent(sub));
+            });
+            if (config.script) bookmarkParams.push('script=' + encodeURIComponent(config.script));
+            if (config.template) bookmarkParams.push('template=' + encodeURIComponent(config.template));
+            if (config.token) bookmarkParams.push('token=' + encodeURIComponent(config.token));
+
+            document.getElementById('bookmarkUrl').textContent = `${window.location.origin}/ui?${bookmarkParams.join('&')}`;
+        }
+
+        // 处理变化
+        function handleChange() {
+            generateLinks();
+            saveToStorage();
+        }
+
+        // 保存到 localStorage
+        function saveToStorage() {
+            const config = getConfig();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        }
+
+        // 复制文本
+        function copyText(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+
+            if (!text || text.includes('请填写') || text.includes('将在此显示')) {
+                return;
+            }
+
+            // 优先使用 Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showCopyFeedback(element);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopy(text, element);
+                });
+            } else {
+                // Clipboard API 不可用时使用降级方案
+                fallbackCopy(text, element);
+            }
+        }
+
+        // 降级复制方案
+        function fallbackCopy(text, element) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '0';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+
+            try {
+                textarea.select();
+                textarea.setSelectionRange(0, 99999); // 移动端兼容
+                const success = document.execCommand('copy');
+                if (success) {
+                    showCopyFeedback(element);
+                } else {
+                    console.error('execCommand copy failed');
+                }
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+
+        // 显示复制反馈
+        function showCopyFeedback(element) {
+            const originalBg = element.style.background;
+            element.style.background = '#d4edda';
+            setTimeout(() => {
+                element.style.background = originalBg;
+            }, 300);
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

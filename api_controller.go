@@ -1,11 +1,15 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed ui.html
+var uiHTML string
 
 // setupRouter 配置路由
 func setupRouter() (r *gin.Engine) {
@@ -17,12 +21,18 @@ func setupRouter() (r *gin.Engine) {
 
 	r.GET("/ping", handlePing)
 	r.GET("/sub", handleSubscription)
+	r.GET("/ui", handleUI)
 
 	return
 }
 
 func handlePing(c *gin.Context) {
 	c.String(http.StatusOK, "pong")
+}
+
+func handleUI(c *gin.Context) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, uiHTML)
 }
 
 // handleSubscription 处理订阅转换请求
