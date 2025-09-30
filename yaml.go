@@ -2,15 +2,29 @@ package main
 
 import (
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 	"resty.dev/v3"
 )
 
+type SubscriptionInfo struct {
+	Url        string
+	Name       string
+	Upload     int64
+	Download   int64
+	Total      int64
+	Expire     int64
+	StatusCode int
+	RawBody    string
+}
+
 type ProxiesContainer struct {
 	Proxies            []map[string]any `yaml:"proxies"`
 	TransparentHeaders map[string]string
+	SubInfos           []*SubscriptionInfo
 }
 
 type Set map[string]bool
@@ -43,9 +57,77 @@ var ClashHeaders = NewSet(
 	"Subscription-Userinfo", "Profile-Web-Page-Url",
 )
 
-func ExtractProxies(url string) (nodes ProxiesContainer, err error) {
+func parseSubscriptionUserinfo(header string) (upload, download, total, expire int64) {
+	pairs := strings.Split(header, ";")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		kv := strings.Split(pair, "=")
+		if len(kv) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(kv[0])
+		value := strings.TrimSpace(kv[1])
+		val, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			continue
+		}
+		switch key {
+		case "upload":
+			upload = val
+		case "download":
+			download = val
+		case "total":
+			total = val
+		case "expire":
+			expire = val
+		}
+	}
+	return
+}
+
+func extractFilename(contentDisposition string) string {
+	parts := strings.Split(contentDisposition, ";")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "filename*=") {
+			// RFC 2231 encoding
+			value := strings.TrimPrefix(part, "filename*=")
+			if idx := strings.Index(value, "''"); idx != -1 {
+				value = value[idx+2:]
+			}
+			value = strings.Trim(value, "\"")
+			// URL decode
+			decoded, err := url.PathUnescape(value)
+			if err == nil {
+				value = decoded
+			}
+			return removeExtension(value)
+		}
+		if strings.HasPrefix(part, "filename=") {
+			value := strings.TrimPrefix(part, "filename=")
+			value = strings.Trim(value, "\"")
+			return removeExtension(value)
+		}
+	}
+	return ""
+}
+
+func removeExtension(filename string) string {
+	if idx := strings.LastIndex(filename, "."); idx != -1 {
+		return filename[:idx]
+	}
+	return filename
+}
+
+func ExtractProxies(url string, name string) (nodes ProxiesContainer, err error) {
 	nodes = ProxiesContainer{
 		TransparentHeaders: make(map[string]string),
+		SubInfos:           make([]*SubscriptionInfo, 0, 1),
+	}
+
+	subInfo := &SubscriptionInfo{
+		Url:  url,
+		Name: name,
 	}
 
 	L().Info(fmt.Sprintf("Fetching nodes: %s", url))
@@ -63,6 +145,14 @@ func ExtractProxies(url string) (nodes ProxiesContainer, err error) {
 		return
 	}
 
+	subInfo.StatusCode = res.StatusCode()
+	subInfo.RawBody = res.String()
+
+	if res.StatusCode() != 200 {
+		err = fmt.Errorf("%d\n%s", res.StatusCode(), res.String())
+		return
+	}
+
 	err = yaml.Unmarshal(res.Bytes(), &nodes)
 	if err != nil {
 		return
@@ -70,12 +160,31 @@ func ExtractProxies(url string) (nodes ProxiesContainer, err error) {
 
 	headers := res.Header()
 
+	contentDisposition := headers.Get("Content-Disposition")
+	if contentDisposition != "" {
+		filename := extractFilename(contentDisposition)
+		if filename != "" {
+			subInfo.Name = filename
+		}
+	}
+
 	for header := range ClashHeaders {
 		headerValue := headers.Get(header)
 		if headerValue != "" {
 			nodes.TransparentHeaders[header] = headerValue
 		}
 	}
+
+	userinfoHeader := headers.Get("Subscription-Userinfo")
+	if userinfoHeader != "" {
+		upload, download, total, expire := parseSubscriptionUserinfo(userinfoHeader)
+		subInfo.Upload = upload
+		subInfo.Download = download
+		subInfo.Total = total
+		subInfo.Expire = expire
+	}
+
+	nodes.SubInfos = append(nodes.SubInfos, subInfo)
 
 	return
 }
