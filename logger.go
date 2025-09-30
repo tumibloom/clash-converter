@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/fatih/color"
 	"io"
 	"log"
 	"log/slog"
 	"os"
 	"runtime"
+
+	"github.com/fatih/color"
 )
 
 type LogHandler struct {

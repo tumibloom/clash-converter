@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"runtime/debug"
+
 	"github.com/dop251/goja"
 	"golang.org/x/sync/errgroup"
-	"runtime/debug"
 )
 
 type Ruleset struct {

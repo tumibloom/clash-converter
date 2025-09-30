@@ -3,9 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"resty.dev/v3"
 	"strconv"
 	"time"
+
+	"resty.dev/v3"
 )
 
 // ENV

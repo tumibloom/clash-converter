@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"strings"
+
 	"gopkg.in/yaml.v3"
 	"resty.dev/v3"
-	"strings"
 )
 
 type ProxiesContainer struct {
@@ -55,7 +56,7 @@ func ExtractProxies(url string) (nodes ProxiesContainer, err error) {
 	}()
 
 	req := client.R()
-	req.SetHeader("User-Agent", "clash-verge/v2.2.3")
+	req.SetHeader("User-Agent", "clash.meta/v1.19.14")
 
 	res, err := req.Get(url)
 	if err != nil {
