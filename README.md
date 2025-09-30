@@ -300,7 +300,7 @@ log({status: 'ok', count: 42});  // 支持对象
 
 ### 完整示例
 
-参见 `example/scripts.js` 和 `example/template.yaml`。
+参见 `example/script.js` 和 `example/template.yaml`。
 
 ### 说明
 
