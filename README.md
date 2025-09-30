@@ -35,6 +35,21 @@ go build
 
 ### Docker 部署
 
+**使用预构建镜像：**
+
+```bash
+# 拉取镜像
+docker pull ghcr.io/etnatker/clash-converter:latest
+
+# 运行容器
+docker run -d \
+  --name clash-converter \
+  -p 8080:8080 \
+  -e ACCESS_TOKEN=your-secret-token \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/etnatker/clash-converter:latest
+```
+
 **使用 Dockerfile 构建：**
 
 ```bash
@@ -57,6 +72,8 @@ version: '3'
 services:
   clash-converter:
     build: .
+    # 或使用预构建
+    # image: ghcr.io/etnatker/clash-converter:latest
     ports:
       - "8080:8080"
     environment:
