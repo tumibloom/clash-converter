@@ -347,7 +347,7 @@ function buildConfig(config) {
 - 不支持 ES6+ 的高级特性（goja 兼容 ES5.1）
 - 不支持 `console.log`，请使用 `log()` 函数
 
-## 📁 项目结构
+## 项目结构
 
 ```
 clash-converter/
