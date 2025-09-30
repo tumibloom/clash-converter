@@ -10,7 +10,8 @@ import (
 	"resty.dev/v3"
 )
 
-type SubscriptionInfo struct {
+// SubscriptionMeta 订阅元信息
+type SubscriptionMeta struct {
 	Url        string
 	Name       string
 	Upload     int64
@@ -21,42 +22,15 @@ type SubscriptionInfo struct {
 	RawBody    string
 }
 
-type ProxiesContainer struct {
+// SubscriptionData 订阅数据容器，包含节点、透传头和订阅信息
+type SubscriptionData struct {
 	Proxies            []map[string]any `yaml:"proxies"`
 	TransparentHeaders map[string]string
-	SubInfos           []*SubscriptionInfo
+	SubInfos           []*SubscriptionMeta
 }
 
-type Set map[string]bool
-
-func NewSet(e ...string) (result Set) {
-	result = make(Set, len(e))
-	for _, v := range e {
-		result[v] = true
-	}
-	return
-}
-
-func (s Set) Has(e string) bool {
-	_, ok := s[e]
-	return ok
-}
-
-var RuleTypes = NewSet(
-	"DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX", "GEOSITE",
-	"IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "IP-ASN", "GEOIP", "SRC-GEOIP", "SRC-IP-ASN",
-	"SRC-IP-CIDR", "SRC-IP-SUFFIX", "DST-PORT", "SRC-PORT", "IN-PORT", "IN-TYPE",
-	"IN-USER", "IN-NAME", "PROCESS-PATH", "PROCESS-PATH", "PROCESS-PATH-REGEX",
-	"PROCESS-PATH-REGEX", "PROCESS-NAME", "PROCESS-NAME", "PROCESS-NAME", "PROCESS-NAME-REGEX",
-	"PROCESS-NAME-REGEX", "PROCESS-NAME-REGEX", "UID", "NETWORK", "DSCP", "RULE-SET", "AND",
-	"OR", "NOT", "SUB-RULE",
-)
-
-var ClashHeaders = NewSet(
-	"Content-Disposition", "Profile-Update-Interval",
-	"Subscription-Userinfo", "Profile-Web-Page-Url",
-)
-
+// parseSubscriptionUserinfo 解析 Subscription-Userinfo 头
+// 格式: upload=123; download=456; total=789; expire=1234567890
 func parseSubscriptionUserinfo(header string) (upload, download, total, expire int64) {
 	pairs := strings.Split(header, ";")
 	for _, pair := range pairs {
@@ -85,18 +59,18 @@ func parseSubscriptionUserinfo(header string) (upload, download, total, expire i
 	return
 }
 
+// extractFilename 从 Content-Disposition 头提取文件名
+// 实现 RFC 2231
 func extractFilename(contentDisposition string) string {
 	parts := strings.Split(contentDisposition, ";")
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "filename*=") {
-			// RFC 2231 encoding
 			value := strings.TrimPrefix(part, "filename*=")
 			if idx := strings.Index(value, "''"); idx != -1 {
 				value = value[idx+2:]
 			}
 			value = strings.Trim(value, "\"")
-			// URL decode
 			decoded, err := url.PathUnescape(value)
 			if err == nil {
 				value = decoded
@@ -119,13 +93,14 @@ func removeExtension(filename string) string {
 	return filename
 }
 
-func ExtractProxies(url string, name string) (nodes ProxiesContainer, err error) {
-	nodes = ProxiesContainer{
+// ExtractProxies 从订阅URL提取节点和元信息
+func ExtractProxies(url string, name string) (nodes SubscriptionData, err error) {
+	nodes = SubscriptionData{
 		TransparentHeaders: make(map[string]string),
-		SubInfos:           make([]*SubscriptionInfo, 0, 1),
+		SubInfos:           make([]*SubscriptionMeta, 0, 1),
 	}
 
-	subInfo := &SubscriptionInfo{
+	subInfo := &SubscriptionMeta{
 		Url:  url,
 		Name: name,
 	}
@@ -134,7 +109,9 @@ func ExtractProxies(url string, name string) (nodes ProxiesContainer, err error)
 
 	client := resty.New()
 	defer func() {
-		err = client.Close()
+		if closeErr := client.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
 	}()
 
 	req := client.R()
@@ -160,6 +137,7 @@ func ExtractProxies(url string, name string) (nodes ProxiesContainer, err error)
 
 	headers := res.Header()
 
+	// 优先使用 Content-Disposition 中的文件名
 	contentDisposition := headers.Get("Content-Disposition")
 	if contentDisposition != "" {
 		filename := extractFilename(contentDisposition)
@@ -189,54 +167,47 @@ func ExtractProxies(url string, name string) (nodes ProxiesContainer, err error)
 	return
 }
 
-func BuildTemplate(
-	template string, Proxies ProxiesContainer, ruleLines []*Ruleset,
-) (result map[string]any, err error) {
-	err = yaml.Unmarshal([]byte(template), &result)
-	result["proxies"] = Proxies.Proxies
-	rules := make([]string, 0, 4096)
+// mergeProxies 合并多个订阅的数据
+// 规则：节点顺序合并，流量统计累加，过期时间取最大值
+func mergeProxies(allProxies []SubscriptionData) SubscriptionData {
+	merged := SubscriptionData{
+		Proxies:            make([]map[string]any, 0),
+		TransparentHeaders: make(map[string]string),
+		SubInfos:           make([]*SubscriptionMeta, 0, len(allProxies)),
+	}
 
-	for _, rule := range ruleLines {
-		tag := rule.tag
-		for _, r := range strings.Split(rule.content, "\n") {
-			r = strings.TrimSpace(r)
-			if len(r) == 0 || r[0] == '#' {
-				continue
-			}
+	var totalUpload, totalDownload, totalTotal, maxExpire int64
+	filenames := make([]string, 0, len(allProxies))
 
-			ruleComponents := strings.Split(r, ",")
-			if len(ruleComponents) < 2 {
-				err = fmt.Errorf("rules must have at least 2 componets: %s", rule.content)
-				return
-			}
+	for _, pc := range allProxies {
+		merged.Proxies = append(merged.Proxies, pc.Proxies...)
 
-			if !RuleTypes.Has(ruleComponents[0]) {
-				continue
+		for _, info := range pc.SubInfos {
+			totalUpload += info.Upload
+			totalDownload += info.Download
+			totalTotal += info.Total
+			if info.Expire > maxExpire {
+				maxExpire = info.Expire
 			}
-
-			if len(ruleComponents) == 3 {
-				rules = append(rules, fmt.Sprintf(
-					"%s,%s,%s,%s",
-					ruleComponents[0], ruleComponents[1], tag, ruleComponents[2],
-				))
-			} else {
-				rules = append(rules, r+","+tag)
-			}
+			merged.SubInfos = append(merged.SubInfos, info)
+			filenames = append(filenames, info.Name)
 		}
 	}
 
-	result["rules"] = rules
-
-	return
-}
-
-func Marshal(y map[string]any) (result string, err error) {
-	resultBytes, err := yaml.Marshal(y)
-	if err != nil {
-		return
+	if totalTotal > 0 {
+		merged.TransparentHeaders["Subscription-Userinfo"] = fmt.Sprintf(
+			"upload=%d; download=%d; total=%d; expire=%d",
+			totalUpload, totalDownload, totalTotal, maxExpire,
+		)
 	}
 
-	result = string(resultBytes)
+	if len(filenames) > 0 {
+		combinedName := strings.Join(filenames, " | ")
+		encodedName := url.PathEscape(combinedName)
+		merged.TransparentHeaders["Content-Disposition"] = fmt.Sprintf(
+			"attachment; filename*=UTF-8''%s", encodedName,
+		)
+	}
 
-	return
+	return merged
 }

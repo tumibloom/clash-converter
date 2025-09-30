@@ -14,6 +14,8 @@ type Ruleset struct {
 	content string
 }
 
+// downloadRulesets 并发下载规则集，保持调用顺序
+// 从 JS 的 rulesets() 函数中提取规则集 URL，并发下载但按原始顺序返回
 func downloadRulesets(vm *goja.Runtime) (resultLines []*Ruleset, err error) {
 	rulesetsFunc := func(func(string, string)) {}
 	jsRulesetsFunc := vm.Get("rulesets")
@@ -79,7 +81,8 @@ func downloadRulesets(vm *goja.Runtime) (resultLines []*Ruleset, err error) {
 	return
 }
 
-func ExecJs(script string, template string, proxies ProxiesContainer) (result string, err error) {
+// ExecJs 执行 JS 脚本，支持 rulesets 和 buildConfig 函数
+func ExecJs(script string, template string, proxies SubscriptionData) (result string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("[panic] %v\n%s", r, string(debug.Stack()))
