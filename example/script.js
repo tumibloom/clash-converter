@@ -112,8 +112,6 @@ function buildConfig(config) {
     ]
 
     config['proxy-groups'] = buildGroups(proxy_names)
-
-    return config
 }
 
 const SEL_GROUP = (name, proxies) => {

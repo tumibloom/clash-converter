@@ -1,0 +1,26 @@
+# 忽略的文件和目录
+data/
+*.db
+*.log
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# 文档
+README.md
+agent_docs/
+
+# 构建产物
+clash-converter
+*.exe
+
+# 临时文件
+tmp/
+temp/
