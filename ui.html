@@ -192,12 +192,14 @@
 
             <div class="form-group">
                 <label for="script">Script URL</label>
-                <input type="url" id="script" placeholder="https://example.com/script.js">
+                <input type="url" id="script" placeholder="留空则使用 config/script.js">
+                <div class="hint">留空将使用默认路径：config/script.js</div>
             </div>
 
             <div class="form-group">
                 <label for="template">Template URL</label>
-                <input type="url" id="template" placeholder="https://example.com/template.yaml">
+                <input type="url" id="template" placeholder="留空则使用 config/template.yaml">
+                <div class="hint">留空将使用默认路径：config/template.yaml</div>
             </div>
 
             <div class="form-group">
@@ -363,6 +365,14 @@
             });
         }
 
+        // 检查是否是默认路径
+        function isDefaultPath(url, baseUrl, defaultPath) {
+            if (!url) return true;
+            const normalizedUrl = url.trim();
+            const expectedDefault = `${baseUrl.trim().replace(/\/+$/, '')}/${defaultPath.replace(/^\/+/, '')}`;
+            return normalizedUrl === expectedDefault;
+        }
+
         // 获取当前配置
         function getConfig() {
             const baseUrl = document.getElementById('baseUrl').value.trim();
@@ -395,11 +405,40 @@
             config.subs.forEach(sub => {
                 params.push('sub=' + encodeURIComponent(sub));
             });
-            if (config.script) params.push('script=' + encodeURIComponent(config.script));
-            if (config.template) params.push('template=' + encodeURIComponent(config.template));
+            // 检查 script 路径
+            if (isDefaultPath(config.script, baseUrl, 'config/script.js')) {
+                params.push('script=' + encodeURIComponent(baseUrl + '/config/script.js'));
+            } else {
+                params.push('script=' + encodeURIComponent(config.script));
+            }
+            // 检查 template 路径
+            if (isDefaultPath(config.template, baseUrl, 'config/template.yaml')) {
+                params.push('template=' + encodeURIComponent(baseUrl + '/config/template.yaml'));
+            } else {
+                params.push('template=' + encodeURIComponent(config.template));
+            }
             if (config.token) params.push('token=' + encodeURIComponent(config.token));
 
-            document.getElementById('resultUrl').textContent = `${baseUrl}/sub?${params.join('&')}`;
+            const longUrl = `${baseUrl}/sub?${params.join('&')}`;
+            // 创建短链接
+            fetch(`${baseUrl}/s/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ url: longUrl })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('resultUrl').textContent = longUrl;
+                } else {
+                    document.getElementById('resultUrl').textContent = `${baseUrl}/s/${data.code}`;
+                }
+            })
+            .catch(() => {
+                document.getElementById('resultUrl').textContent = longUrl;
+            });
 
             // 手动构建收藏链接参数
             const bookmarkParams = [];
@@ -407,8 +446,13 @@
             config.subs.forEach(sub => {
                 bookmarkParams.push('sub=' + encodeURIComponent(sub));
             });
-            if (config.script) bookmarkParams.push('script=' + encodeURIComponent(config.script));
-            if (config.template) bookmarkParams.push('template=' + encodeURIComponent(config.template));
+            // 只有当用户填写了自定义的 script 和 template 时才添加到收藏链接中
+            if (config.script && config.script !== baseUrl + '/config/script.js') {
+                bookmarkParams.push('script=' + encodeURIComponent(config.script));
+            }
+            if (config.template && config.template !== baseUrl + '/config/template.yaml') {
+                bookmarkParams.push('template=' + encodeURIComponent(config.template));
+            }
             if (config.token) bookmarkParams.push('token=' + encodeURIComponent(config.token));
 
             document.getElementById('bookmarkUrl').textContent = `${window.location.origin}/ui?${bookmarkParams.join('&')}`;
@@ -423,6 +467,16 @@
         // 保存到 localStorage
         function saveToStorage() {
             const config = getConfig();
+            const baseUrl = config.baseUrl.trim().replace(/\/+$/, '');
+            
+            // 如果是默认路径，则不保存 script 和 template
+            if (isDefaultPath(config.script, baseUrl, 'config/script.js')) {
+                config.script = '';
+            }
+            if (isDefaultPath(config.template, baseUrl, 'config/template.yaml')) {
+                config.template = '';
+            }
+            
             localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
         }
 

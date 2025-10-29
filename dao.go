@@ -19,6 +19,13 @@ type File struct {
 	Content string `gorm:"type:text"`
 }
 
+type ShortUrl struct {
+	gorm.Model
+	Code      string `gorm:"uniqueIndex"`
+	LongUrl   string `gorm:"type:text"`
+	ExpiredAt int64  // 过期时间戳
+}
+
 var orm *gorm.DB
 
 func InitDb() {
@@ -37,7 +44,7 @@ func InitDb() {
 		panic("failed to connect database: " + err.Error())
 	}
 
-	err = orm.AutoMigrate(&File{})
+	err = orm.AutoMigrate(&File{}, &ShortUrl{})
 	if err != nil {
 		panic("failed to migrate: " + err.Error())
 	}

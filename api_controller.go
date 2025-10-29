@@ -2,10 +2,13 @@ package main
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 //go:embed ui.html
@@ -22,6 +25,11 @@ func setupRouter() (r *gin.Engine) {
 	r.GET("/ping", handlePing)
 	r.GET("/sub", handleSubscription)
 	r.GET("/ui", handleUI)
+	r.GET("/s/:code", handleShortUrl)
+	r.POST("/s/create", handleCreateShortUrl)
+
+	// 配置静态文件服务以提供 config 目录下的文件
+	r.Static("/config", "./config")
 
 	return
 }
@@ -33,6 +41,44 @@ func handlePing(c *gin.Context) {
 func handleUI(c *gin.Context) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, uiHTML)
+}
+
+// handleShortUrl 处理短链接重定向
+func handleShortUrl(c *gin.Context) {
+	code := c.Param("code")
+	var shortUrl ShortUrl
+	err := orm.Where("code = ? AND expired_at > ?", code, time.Now().Unix()).First(&shortUrl).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.String(http.StatusNotFound, "Short URL not found or expired")
+			return
+		}
+		c.String(http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	c.Redirect(http.StatusMovedPermanently, shortUrl.LongUrl)
+}
+
+// handleCreateShortUrl 处理创建短链接的请求
+func handleCreateShortUrl(c *gin.Context) {
+	var body struct {
+		URL string `json:"url" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "URL is required"})
+		return
+	}
+
+	code, err := CreateShortUrl(body.URL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": code})
 }
 
 // handleSubscription 处理订阅转换请求
@@ -51,9 +97,35 @@ func handleSubscription(c *gin.Context) {
 	}
 
 	// 参数校验
-	if len(subs) == 0 || scriptUrl == "" || templateUrl == "" {
-		c.String(http.StatusBadRequest, "sub, script and template are required")
+	if len(subs) == 0 {
+		c.String(http.StatusBadRequest, "sub is required")
 		return
+	}
+
+	// 如果未提供 script 或 template，使用默认文件
+	if scriptUrl == "" {
+		defaultScriptPath := "./config/script.js"
+		if !FileExists(defaultScriptPath) {
+			c.String(http.StatusNotFound, "Default script file not found")
+			return
+		}
+		scheme := "http"
+		if c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		scriptUrl = scheme + "://" + c.Request.Host + "/config/script.js"
+	}
+	if templateUrl == "" {
+		defaultTemplatePath := "./config/template.yaml"
+		if !FileExists(defaultTemplatePath) {
+			c.String(http.StatusNotFound, "Default template file not found")
+			return
+		}
+		scheme := "http"
+		if c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		templateUrl = scheme + "://" + c.Request.Host + "/config/template.yaml"
 	}
 
 	// 提取所有订阅的节点
